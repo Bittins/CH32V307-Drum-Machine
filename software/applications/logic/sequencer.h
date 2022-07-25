@@ -12,11 +12,26 @@
 
 #include "input/input.h"
 
-#define CUR_SEQ     state->seq
-#define CUR_PAGE    state->page
-#define CUR_STEP    state->step
+#define INST_AMNT           8
+#define MAX_PAGE            16
+#define MAX_STEP            16
+
+#define BEAT_TIM_PSC        2400-1      // Timer prescaler value; CLK / PSC = ARR per 1 second
+#define BEAT_TIM_ARR_SEC    60000       // The value the autoreload register would need to be for a 1 second interval
 
 #define PATTERN_MODE        1
+
+enum InstName
+{
+    kick, snare
+};
+
+struct InstData
+{
+    enum InstName inst;
+    uint8_t sr_pos;
+    uint8_t button;         // The corresponding button to trigger that instrument
+};
 
 enum StepType
 {
@@ -32,22 +47,30 @@ struct StepData
 
 struct PageData
 {
-    struct StepData step[16];
+    struct StepData step[MAX_STEP];
     uint8_t length;
 };
 
 struct SeqData
 {
-    struct PageData page[16];
+    struct PageData page[MAX_PAGE];
+    uint8_t length;
+    struct InstData inst;
+};
+
+struct PattData
+{
+    struct SeqData seq[INST_AMNT];
     uint8_t length;
 };
 
 struct MachineState
 {
+    enum InstName inst;
     uint8_t step;
     uint8_t page;
     uint8_t seq;
-    uint8_t inst;
+    uint8_t patt;
     uint8_t bpm;
     uint8_t swing;
     uint8_t mode;

@@ -244,7 +244,6 @@
 #define BSP_I2C1_SDA_PIN 23
 #define BSP_USING_SPI
 #define BSP_USING_SPI1
-#define BSP_USING_SPI2
 /* end of On-chip Peripheral Drivers */
 
 /* Board extended module Drivers */

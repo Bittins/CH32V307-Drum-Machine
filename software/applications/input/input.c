@@ -35,14 +35,12 @@ void inputTaskEntry(void* param)
             inputQueueSend(&input_events);
         }
 
-//        rt_kprintf("e");
         rt_thread_delay_until(&tick, delay);
     }
 }
 
 void inputQueueSend(struct InputEvents* input_events)
 {
-//    rt_kprintf("event!\n");
     if (rt_mq_send(input_event_mq, input_events, sizeof(struct InputEvents)) != RT_EOK)
     {
         rt_kprintf("failed to send input message\n");

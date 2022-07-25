@@ -9,25 +9,26 @@
  */
 
 #include "sequencer.h"
+#include "inst_sr.h"
 #include <string.h>
 
-void kbLEDDataSend(uint8_t led_data[3], struct SeqData* seq, struct MachineState* state);
-void seqStepToggle(struct SeqData* seq, struct InputEvents* events, struct MachineState* state);
+void kbLEDDataSend(uint8_t led_data[3], struct PattData* patt);
+void seqStepToggle(struct PattData* patt, struct InputEvents* events);
 void seqInputQueueGet(struct InputEvents* input_events);
+uint8_t beatTimerInit(void);
+
+static struct MachineState state;
+static struct PattData pattern[1];
 
 void seqTaskEntry(void* param)
 {
-    struct SeqData sequence[1];
     struct InputEvents input_events;
-    static struct MachineState state;
-
-    memset(sequence, 0, sizeof(struct SeqData));
 
     while (1)
     {
         seqInputQueueGet(&input_events);
 
-        seqStepToggle(sequence, &input_events, &state);
+        seqStepToggle(pattern, &input_events);
 
 //        switch (state.mode)
 //        {
@@ -42,14 +43,18 @@ void seqTaskEntry(void* param)
 //                break;
 //        }
 
-        kbLEDDataSend(kb_led_data, sequence, &state);          // TODO: Move function to UI task
+        kbLEDDataSend(kb_led_data, pattern);          // TODO: Move function to UI task
     }
 }
 
-void kbLEDDataSend(uint8_t* led_data, struct SeqData* seq, struct MachineState* state)
+void kbLEDDataSend(uint8_t* led_data, struct PattData* patt)
 {
     // [0] = function row L to R, [1] = 1 2 3 4 5 6 7 8, [2] = 9 10 11 12 13 14 15 16
     memset(led_data, 0, (sizeof(uint8_t) * KB_CHAIN_LENGTH));
+
+    uint8_t cur_patt = state.patt;
+    uint8_t cur_inst = state.seq;
+    uint8_t cur_page = state.page;
 
     uint8_t i;
     uint8_t j;
@@ -57,17 +62,21 @@ void kbLEDDataSend(uint8_t* led_data, struct SeqData* seq, struct MachineState* 
     {
         for (j = 0; j < 8; j++)
         {
-            led_data[i + 1] |= seq[CUR_SEQ].page[CUR_PAGE].step[j + (i * 8)].type << j;
+            led_data[i + 1] |= patt[cur_patt].seq[cur_inst].page[cur_page].step[j + (i * 8)].type << j;
         }
     }
 }
 
-void seqStepToggle(struct SeqData* seq, struct InputEvents* events, struct MachineState* state)
+void seqStepToggle(struct PattData* patt, struct InputEvents* events)
 {
+    uint8_t cur_patt = state.patt;
+    uint8_t cur_inst = state.seq;
+    uint8_t cur_page = state.page;
+
     uint8_t i;
     for (i = 0; i < 16; i++)
     {
-        seq[CUR_SEQ].page[CUR_PAGE].step[i].type ^= (events->button_events.just_pressed.main_row >> i) & 1;
+        patt[cur_patt].seq[cur_inst].page[cur_page].step[i].type ^= (events->button_events.just_pressed.main_row >> i) & 1;
     }
 }
 
@@ -81,6 +90,9 @@ void seqInputQueueGet(struct InputEvents* input_events)
 
 uint8_t sequencerTaskInit(void)
 {
+    memset(&state, 0, sizeof(state));
+    memset(pattern, 0, sizeof(pattern));
+
     rt_thread_t tid = rt_thread_create("sequencerTaskEntry", seqTaskEntry, RT_NULL, 4096, 6, 10);
 
     if (tid != RT_NULL)
@@ -91,63 +103,58 @@ uint8_t sequencerTaskInit(void)
     {
         rt_kprintf("failed to start sequencerTask");
     }
+
+    instSRInit();
+    beatTimerInit();
 }
 
-//void stepHandler_Entry(void *param)
-//{
-//
-//    rt_uint8_t kbButtonPressed[KBMODULE_CHAIN_LENGTH] = { 0 };
-//
-//    /* Infinite loop */
-//    for (;;)
-//    {
-//        /* Do annoying pointer stuff for the mailbox */
-//        rt_uint8_t* button_ptr;
-//        if (rt_mb_recv(kbButton_MB, (rt_ubase_t*) &button_ptr, RT_WAITING_FOREVER) == RT_EOK)
-//        {
-//            rt_uint8_t i;
-//            for (i = 0; i < KBMODULE_CHAIN_LENGTH; i++)
-//            {
-//                kbButtonPressed[i] = button_ptr[i];
-//            }
-//            rt_free(button_ptr);
-//
-//            rt_uint8_t kbLEDData[KBMODULE_CHAIN_LENGTH] = { 0 };
-//            for (i = 0; i < KBMODULE_CHAIN_LENGTH; i++)
-//            {
-//                rt_uint8_t j;
-//                for (j = 0; j < 8; j++)
-//                {
-//                    // TODO Update to allow other data types such as tuplets, also allow to change which instrument is being updated
-//                    instrument[inst_current].sequence[7 - j].type ^= kbButtonPressed[i] & 1;
-//                    kbButtonPressed[i] >>= 1;
-//                    kbLEDData[i] |= (instrument[inst_current].sequence[7 - j].type) << j;
-//                }
-//            }
-//
-//            /* Dumb pointer stuff for mailbox*/
-//            rt_uint8_t* led_ptr;
-//            led_ptr = (rt_uint8_t *) rt_malloc(sizeof(rt_uint8_t) * KBMODULE_CHAIN_LENGTH);
-//            for (i = 0; i < KBMODULE_CHAIN_LENGTH; i++)
-//            {
-//                led_ptr[i] = kbLEDData[i];
-//            }
-//            // Send data to the queue
-//            if (rt_mb_send(kbLED_MB, (rt_uint32_t) led_ptr) != RT_EOK)
-//            {
-//                rt_kprintf("LED MB failed to send\n");
-//            }
-//        }
-//        rt_thread_delay(1);
-//    }
-//}
-//
-//void stepHandler_init(void)
-//{
-//    rt_thread_t tid = rt_thread_create("stepHandler", stepHandler_Entry, RT_NULL, 2048, 16, 5);
-//
-//    if (tid != RT_NULL)
-//    {
-//        rt_thread_startup(tid);
-//    }
-//}
+uint8_t beatTimerInit(void)
+{
+    state.bpm = 120;
+    uint16_t period = (60 * BEAT_TIM_ARR_SEC) / state.bpm;
+
+    // Create and initialize timer
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+    TIM_TimeBaseInitTypeDef tim_base_struct = {0};
+    tim_base_struct.TIM_Period = period;
+    tim_base_struct.TIM_Prescaler = BEAT_TIM_PSC;
+    tim_base_struct.TIM_ClockDivision = TIM_CKD_DIV1;
+    tim_base_struct.TIM_CounterMode = TIM_CounterMode_Up;
+
+    TIM_TimeBaseInit(TIM2, &tim_base_struct);
+    TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
+
+    // Create and initialize interrupt
+    NVIC_InitTypeDef itr_struct = {0};
+    itr_struct.NVIC_IRQChannel = TIM2_IRQn;
+    itr_struct.NVIC_IRQChannelPreemptionPriority = 2;
+    itr_struct.NVIC_IRQChannelSubPriority = 0;
+    itr_struct.NVIC_IRQChannelCmd = ENABLE;
+
+    NVIC_Init(&itr_struct);
+    NVIC_EnableIRQ(TIM2_IRQn);
+
+    TIM_Cmd(TIM2, ENABLE);
+}
+
+// Beat timer callback function
+__attribute__((interrupt("WCH-Interrupt-fast"))) void TIM2_IRQHandler(void)
+{
+    // Immediately reset timer
+    TIM2->INTFR = 0;
+
+    rt_interrupt_enter();
+
+    instSROut(pattern, &state);
+
+    if (state.step < MAX_STEP-1)
+    {
+        state.step++;
+    }
+    else
+    {
+        state.step = 0;
+    }
+
+    rt_interrupt_leave();
+}
