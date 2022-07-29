@@ -8,12 +8,15 @@
  * 2022-07-05     marcus       the first version
  */
 
+
 #include <string.h>
 #include "keyboard.h"
 
-static struct rt_spi_device* kb_spi_dev;
+void kbGUIEventSend(void);
 
+rt_event_t kb_update_event;
 uint8_t kb_led_data[KB_CHAIN_LENGTH] = {0};
+static struct rt_spi_device* kb_spi_dev;
 
 // TODO: Modify for future LED data (PWM brightness)
 void kbLEDDataGet(uint8_t* led_data)
@@ -32,6 +35,8 @@ void kbTransferData(uint8_t* led_data, uint8_t* button_data)
 
     uint8_t button_data_temp[KB_CHAIN_LENGTH] = {0};
 
+    // LED:    [0] = function row L to R, [1] = 1 2 3 4 5 6 7 8, [2] = 9 10 11 12 13 14 15 16
+    // Button: [0] == 16 15 14 13 12 11 10 9, [1] == 8 7 6 5 4 3 2 1, [2] == function buttons R to L
     // Download KB button data and upload LED data
     if (rt_spi_transfer(kb_spi_dev, led_data, button_data_temp, KB_CHAIN_LENGTH) == 0)
     {
@@ -44,9 +49,29 @@ void kbTransferData(uint8_t* led_data, uint8_t* button_data)
     {
         button_data[i] = ~button_data_temp[i];
     }
+
+    kbGUIEventSend();
 }
 
-uint8_t kbParseButtons(uint8_t* button_data, struct InputEvents* input_events)
+void kbGUIEventSend(void)
+{
+    switch (rt_event_send(kb_update_event, 1))
+    {
+        case RT_EOK:
+//            rt_kprintf("success sending kb update event\n");
+            break;
+
+        case RT_ETIMEOUT:
+            rt_kprintf("timeout sending kb update event\n");
+            break;
+
+        default:
+            rt_kprintf("error sending kb update event\n");
+            break;
+    }
+}
+
+uint8_t kbParseButtons(uint8_t* button_data, struct ButtonEvents* button_events)
 {
     uint8_t update = 0;
     static uint8_t button_data_prev[KB_CHAIN_LENGTH];
@@ -76,11 +101,14 @@ uint8_t kbParseButtons(uint8_t* button_data, struct InputEvents* input_events)
     // Return 0 if nothing has changed
     if (!update)
     {
+        button_events->just_pressed.main_row   = 0;
+        button_events->just_released.main_row  = 0;
+
         return update;
     }
 
     // Clear out previous data
-    memset(&input_events->button_events, 0, sizeof(input_events->button_events));
+    memset(button_events, 0, sizeof(*button_events));
 
     // Put event data into input_event struct
 
@@ -88,14 +116,14 @@ uint8_t kbParseButtons(uint8_t* button_data, struct InputEvents* input_events)
     // Designed the boards dumb and backwards so i have to manipulate the data dumb and backwards
     for (i = 0; i < 2; i++)
     {
-        input_events->button_events.is_held.main_row        |= (((uint16_t)is_held[i]) << ((1 - i) * 8));
-        input_events->button_events.just_pressed.main_row   |= (((uint16_t)just_pressed[i]) << ((1 - i) * 8));
-        input_events->button_events.just_released.main_row  |= (((uint16_t)just_released[i]) << ((1 - i) * 8));
+        button_events->is_held.main_row        |= (((uint16_t)is_held[i]) << ((1 - i) * 8));
+        button_events->just_pressed.main_row   |= (((uint16_t)just_pressed[i]) << ((1 - i) * 8));
+        button_events->just_released.main_row  |= (((uint16_t)just_released[i]) << ((1 - i) * 8));
     }
 
-    input_events->button_events.is_held.function        = is_held[2];
-    input_events->button_events.just_pressed.function   = just_pressed[2];
-    input_events->button_events.just_released.function  = just_released[2];
+    button_events->is_held.function        = is_held[2];
+    button_events->just_pressed.function   = just_pressed[2];
+    button_events->just_released.function  = just_released[2];
 
     return update;
 }
@@ -138,4 +166,6 @@ uint8_t kbInit(void)
     // Configure latch pin & LED0 pin
     rt_pin_mode(KB_LATCH_PIN, PIN_MODE_OUTPUT);
     rt_pin_write(KB_LATCH_PIN, PIN_HIGH);
+
+    kb_update_event = rt_event_create("kb_update_event", RT_IPC_FLAG_PRIO);
 }

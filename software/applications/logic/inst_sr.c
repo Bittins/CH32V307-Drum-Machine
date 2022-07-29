@@ -22,7 +22,7 @@ void instSROut(struct PattData* pattern, struct MachineState *state)
     uint16_t sr_out = 0;
 
     uint8_t cur_patt = state->patt;
-//    uint8_t cur_inst = state->seq;
+//    uint8_t cur_seq = state->seq;
     uint8_t cur_page = state->page;
     uint8_t cur_step = state->step;
 
@@ -68,9 +68,8 @@ uint8_t instSRInit(void)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
 
-    GPIO_InitTypeDef gpio_init_struct = {0};
-
     // Init GPIO NSS
+    GPIO_InitTypeDef gpio_init_struct = {0};
     gpio_init_struct.GPIO_Pin = GPIO_Pin_12;
     gpio_init_struct.GPIO_Mode = GPIO_Mode_Out_PP;
     gpio_init_struct.GPIO_Speed = GPIO_Speed_50MHz;

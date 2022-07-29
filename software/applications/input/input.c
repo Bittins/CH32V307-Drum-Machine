@@ -1,4 +1,5 @@
 /*
+#include <gui/leds.h>
  * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -8,6 +9,7 @@
  * 2022-07-15     marcus       the first version
  */
 #include "input.h"
+#include "encoder.h"
 
 void inputQueueSend(struct InputEvents* input_events);
 
@@ -30,7 +32,7 @@ void inputTaskEntry(void* param)
         kbTransferData(led_data, button_data);
 
         // If there are any updates to the keyboard or encoder, then send event queue
-        if (kbParseButtons(button_data, &input_events) || encUpdate(&input_events))
+        if (kbParseButtons(button_data, &input_events.button_events) || encUpdate(&input_events))
         {
             inputQueueSend(&input_events);
         }
@@ -54,7 +56,7 @@ uint8_t inputTaskInit(void)
 
     input_event_mq = rt_mq_create("input_event_mq", sizeof(struct InputEvents), 8, RT_IPC_FLAG_PRIO);
 
-    rt_thread_t tid = rt_thread_create("inputTaskEntry", inputTaskEntry, RT_NULL, 4096, 7, 10);
+    rt_thread_t tid = rt_thread_create("inputTaskEntry", inputTaskEntry, RT_NULL, 2048, 5, 10);
 
     if (tid != RT_NULL)
     {

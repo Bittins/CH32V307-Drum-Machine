@@ -8,7 +8,7 @@
  * 2022-07-05     marcus       the first version
  */
 
-#include "display.h"
+#include <gui/display.h>
 
 void display_Entry(void *param)
 {

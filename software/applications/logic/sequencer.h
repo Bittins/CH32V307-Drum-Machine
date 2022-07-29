@@ -13,17 +13,21 @@
 #include "input/input.h"
 
 #define INST_AMNT           8
+#define MAX_PATT            1
 #define MAX_PAGE            16
 #define MAX_STEP            16
 
 #define BEAT_TIM_PSC        2400-1      // Timer prescaler value; CLK / PSC = ARR per 1 second
 #define BEAT_TIM_ARR_SEC    60000       // The value the autoreload register would need to be for a 1 second interval
 
+#define BPM_DEFAULT         120
+#define QUARTER_LENGTH      4           // How many beats in a quarter note
+
 #define PATTERN_MODE        1
 
 enum InstName
 {
-    kick, snare
+    kick, snare, ch, tom
 };
 
 struct InstData
@@ -71,11 +75,20 @@ struct MachineState
     uint8_t page;
     uint8_t seq;
     uint8_t patt;
-    uint8_t bpm;
+    uint16_t bpm;
     uint8_t swing;
     uint8_t mode;
 };
 
-uint8_t sequencerTaskInit(void);
+struct PattStatePointers
+{
+    struct MachineState* state;
+    struct PattData* patt;
+};
+
+uint8_t seqTaskInit(void);
+
+extern rt_mq_t patt_state_mq;
+extern rt_event_t gui_update_event;
 
 #endif /* APPLICATIONS_SEQUENCER_H_ */

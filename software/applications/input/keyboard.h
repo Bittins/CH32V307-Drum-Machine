@@ -28,6 +28,7 @@ struct ButtonData
 {
     uint16_t main_row;
     uint8_t function;
+    uint8_t enc_button;
 };
 
 struct ButtonEvents
@@ -49,18 +50,12 @@ enum FunctionKeys
     play_pause
 };
 
-struct InputEvents
-{
-    struct ButtonEvents button_events;
-    uint8_t enc_button;
-    int enc_rotation;
-};
-
+extern rt_event_t kb_update_event;
 extern uint8_t kb_led_data[KB_CHAIN_LENGTH];
 
 void kbLEDDataGet(uint8_t* led_data);
 void kbTransferData(uint8_t* led_data, uint8_t* button_data);
-uint8_t kbParseButtons(uint8_t* button_data, struct InputEvents* input_events);
+uint8_t kbParseButtons(uint8_t* button_data, struct ButtonEvents* button_events);
 uint8_t kbInit(void);
 
 #endif /* APPLICATIONS_KEYBOARD_H_ */

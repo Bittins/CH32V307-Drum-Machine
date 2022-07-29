@@ -11,13 +11,16 @@
 #define APPLICATIONS_INPUT_H_
 
 #include "keyboard.h"
-#include "encoder.h"
+
 
 // Frequency that the task loop will run at in Hz
-#define INPUT_TASK_FREQ     100
+#define INPUT_TASK_FREQ     240
 
-
-
+struct InputEvents
+{
+    struct ButtonEvents button_events;
+    int16_t enc_rotation;
+};
 
 uint8_t inputTaskInit(void);
 

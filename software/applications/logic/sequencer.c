@@ -10,15 +10,23 @@
 
 #include "sequencer.h"
 #include "inst_sr.h"
+#include "gui/gui.h"
 #include <string.h>
 
+uint8_t guiUpdateEventSend(void);
 void kbLEDDataSend(uint8_t led_data[3], struct PattData* patt);
 void seqStepToggle(struct PattData* patt, struct InputEvents* events);
 void seqInputQueueGet(struct InputEvents* input_events);
+void encBpmAdj(struct InputEvents* input_events);
+void encButtonInst(struct InputEvents* input_events);
+void bpmSet(uint16_t bpm);
 uint8_t beatTimerInit(void);
 
+rt_mq_t patt_state_mq;
+rt_event_t gui_update_event;
+
 static struct MachineState state;
-static struct PattData pattern[1];
+static struct PattData pattern[MAX_PATT];
 
 void seqTaskEntry(void* param)
 {
@@ -29,6 +37,8 @@ void seqTaskEntry(void* param)
         seqInputQueueGet(&input_events);
 
         seqStepToggle(pattern, &input_events);
+        encBpmAdj(&input_events);
+        encButtonInst(&input_events);
 
 //        switch (state.mode)
 //        {
@@ -43,27 +53,37 @@ void seqTaskEntry(void* param)
 //                break;
 //        }
 
-        kbLEDDataSend(kb_led_data, pattern);          // TODO: Move function to UI task
+        guiUpdateEventSend();
     }
 }
 
-void kbLEDDataSend(uint8_t* led_data, struct PattData* patt)
+void seqInputQueueGet(struct InputEvents* input_events)
 {
-    // [0] = function row L to R, [1] = 1 2 3 4 5 6 7 8, [2] = 9 10 11 12 13 14 15 16
-    memset(led_data, 0, (sizeof(uint8_t) * KB_CHAIN_LENGTH));
-
-    uint8_t cur_patt = state.patt;
-    uint8_t cur_inst = state.seq;
-    uint8_t cur_page = state.page;
-
-    uint8_t i;
-    uint8_t j;
-    for (i = 0; i < 2; i++)
+    if (rt_mq_recv(input_event_mq, input_events, sizeof(struct InputEvents), RT_WAITING_FOREVER) != RT_EOK)
     {
-        for (j = 0; j < 8; j++)
-        {
-            led_data[i + 1] |= patt[cur_patt].seq[cur_inst].page[cur_page].step[j + (i * 8)].type << j;
-        }
+        rt_kprintf("failed to read input queue\n");
+    }
+}
+
+uint8_t guiUpdateEventSend(void)
+{
+//    if (rt_event_send(gui_update_event, 1) != RT_EOK)
+//    {
+//        rt_kprintf("failed to send gui update event\n");
+//    }
+    switch (rt_event_send(gui_update_event, 1))
+    {
+        case RT_EOK:
+//            rt_kprintf("success sending gui update event\n");
+            break;
+
+        case RT_ETIMEOUT:
+            rt_kprintf("timeout sending gui update event\n");
+            break;
+
+        default:
+            rt_kprintf("error sending gui update event\n");
+            break;
     }
 }
 
@@ -80,20 +100,46 @@ void seqStepToggle(struct PattData* patt, struct InputEvents* events)
     }
 }
 
-void seqInputQueueGet(struct InputEvents* input_events)
+void seqSetDefaults(struct MachineState* state, struct PattData* patt)
 {
-    if (rt_mq_recv(input_event_mq, input_events, sizeof(struct InputEvents), RT_WAITING_FOREVER) != RT_EOK)
+    memset(state, 0, sizeof(state));
+    memset(patt, 0, sizeof(patt));
+
+    state->bpm = BPM_DEFAULT;
+    state->mode = PATTERN_MODE;
+
+    uint8_t i;
+    uint8_t j;
+    uint8_t k;
+    for (i = 0; i < MAX_PATT; i++);
     {
-        rt_kprintf("failed to read input queue\n");
+        patt[i].length = 1;
+        for (j = 0; j < INST_AMNT; j++)
+        {
+            patt->seq[j].length = 1;
+            for (k = 0; k < MAX_PAGE; k++)
+            {
+                patt->seq[j].page[k].length = 16;
+            }
+        }
     }
 }
 
-uint8_t sequencerTaskInit(void)
+uint8_t guiQueueSend(struct PattData* patt, struct MachineState* state)
 {
-    memset(&state, 0, sizeof(state));
-    memset(pattern, 0, sizeof(pattern));
+    struct PattStatePointers msg;
+    msg.patt = patt;
+    msg.state = state;
 
-    rt_thread_t tid = rt_thread_create("sequencerTaskEntry", seqTaskEntry, RT_NULL, 4096, 6, 10);
+    patt_state_mq = rt_mq_create("patt_state_mq", sizeof(msg), 1, RT_IPC_FLAG_PRIO);
+    rt_mq_send(patt_state_mq, &msg, sizeof(msg));
+}
+
+uint8_t seqTaskInit(void)
+{
+    seqSetDefaults(&state, pattern);
+
+    rt_thread_t tid = rt_thread_create("seqTaskEntry", seqTaskEntry, RT_NULL, 4096, 6, 10);
 
     if (tid != RT_NULL)
     {
@@ -101,60 +147,133 @@ uint8_t sequencerTaskInit(void)
     }
     else
     {
-        rt_kprintf("failed to start sequencerTask");
+        rt_kprintf("failed to start seqTask");
     }
+
+    guiQueueSend(pattern, &state);
+    gui_update_event = rt_event_create("gui_update_event", RT_IPC_FLAG_PRIO);
 
     instSRInit();
     beatTimerInit();
 }
 
-uint8_t beatTimerInit(void)
+void encBpmAdj(struct InputEvents* input_events)
 {
-    state.bpm = 120;
-    uint16_t period = (60 * BEAT_TIM_ARR_SEC) / state.bpm;
+    if (input_events->enc_rotation)
+    {
+        bpmSet(state.bpm + input_events->enc_rotation);
+    }
+}
 
-    // Create and initialize timer
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-    TIM_TimeBaseInitTypeDef tim_base_struct = {0};
-    tim_base_struct.TIM_Period = period;
-    tim_base_struct.TIM_Prescaler = BEAT_TIM_PSC;
-    tim_base_struct.TIM_ClockDivision = TIM_CKD_DIV1;
-    tim_base_struct.TIM_CounterMode = TIM_CounterMode_Up;
+void encButtonInst(struct InputEvents* input_events)
+{
+    if (input_events->button_events.just_pressed.enc_button)
+    {
+        if (state.seq < 3)
+        {
+            state.seq ++;
+        }
+        else
+        {
+            state.seq = 0;
+        }
 
-    TIM_TimeBaseInit(TIM2, &tim_base_struct);
-    TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
+        rt_kprintf("instrument: %d\n", state.seq);
+    }
+}
 
-    // Create and initialize interrupt
-    NVIC_InitTypeDef itr_struct = {0};
-    itr_struct.NVIC_IRQChannel = TIM2_IRQn;
-    itr_struct.NVIC_IRQChannelPreemptionPriority = 2;
-    itr_struct.NVIC_IRQChannelSubPriority = 0;
-    itr_struct.NVIC_IRQChannelCmd = ENABLE;
+void bpmSet(uint16_t bpm)
+{
+    uint16_t period = (60 * BEAT_TIM_ARR_SEC) / (bpm * QUARTER_LENGTH);
+    state.bpm = bpm;
+    rt_kprintf("bpm: %d\n", state.bpm);
 
-    NVIC_Init(&itr_struct);
-    NVIC_EnableIRQ(TIM2_IRQn);
+    TIM_SetAutoreload(TIM2, period);
+}
 
-    TIM_Cmd(TIM2, ENABLE);
+// TODO: Split beat functions to separate file
+// TODO: Modify to support polyrhythms
+void beatIncrement(struct MachineState* state)
+{
+    if (state->step < MAX_STEP-1)
+    {
+        state->step++;
+    }
+    else
+    {
+        state->step = 0;
+    }
+
+    guiUpdateEventSend();
 }
 
 // Beat timer callback function
 __attribute__((interrupt("WCH-Interrupt-fast"))) void TIM2_IRQHandler(void)
 {
-    // Immediately reset timer
+    // Immediately reset timer interrupt
     TIM2->INTFR = 0;
 
     rt_interrupt_enter();
 
     instSROut(pattern, &state);
 
-    if (state.step < MAX_STEP-1)
-    {
-        state.step++;
-    }
-    else
-    {
-        state.step = 0;
-    }
+    beatIncrement(&state);
 
     rt_interrupt_leave();
 }
+
+uint8_t beatTimerInit(void)
+{
+    // Init timer
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+
+    TIM_TimeBaseInitTypeDef tim_base_struct = {0};
+    tim_base_struct.TIM_Prescaler = BEAT_TIM_PSC;
+    tim_base_struct.TIM_ClockDivision = TIM_CKD_DIV1;
+    tim_base_struct.TIM_CounterMode = TIM_CounterMode_Up;
+    TIM_TimeBaseInit(TIM2, &tim_base_struct);
+
+    bpmSet(BPM_DEFAULT);
+
+    TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
+
+    // Init interrupt
+    NVIC_InitTypeDef itr_struct = {0};
+    itr_struct.NVIC_IRQChannel = TIM2_IRQn;
+    itr_struct.NVIC_IRQChannelPreemptionPriority = 2;
+    itr_struct.NVIC_IRQChannelSubPriority = 0;
+    itr_struct.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&itr_struct);
+
+    NVIC_EnableIRQ(TIM2_IRQn);
+
+    TIM_Cmd(TIM2, ENABLE);
+}
+
+void bpm(int argc, char* argv[])
+{
+    char* str = argv[1];
+    state.bpm = atoi(str);
+    uint16_t period = (60 * BEAT_TIM_ARR_SEC) / state.bpm;
+
+    rt_kprintf("set bpm to %d, period is %d\n", state.bpm, period);
+
+    TIM_SetAutoreload(TIM2, period);
+}
+MSH_CMD_EXPORT(bpm, set bpm);
+
+//void inst(int argc, char* argv[])
+//{
+//    char* str = argv[1];
+//    uint8_t inst = atoi(str);
+//    if (inst < 8)
+//    {
+//        state.seq = inst;
+//        kbLEDDataSend(kb_led_data, pattern);
+//    }
+//    else
+//    {
+//        rt_kprintf("not an instrument!");
+//    }
+//}
+//MSH_CMD_EXPORT(inst, change instrument);

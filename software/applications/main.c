@@ -12,10 +12,10 @@
 #include <rthw.h>
 #include "drivers/pin.h"
 #include <board.h>
+#include <gui/display.h>
 #include <rtdevice.h>
 #include "drv_spi.h"
 
-#include "display.h"
 #include "input/input.h"
 #include "logic/sequencer.h"
 
@@ -76,7 +76,8 @@ int main(void)
     rt_pin_write(LED0_PIN, PIN_LOW);
 
     inputTaskInit();
-    sequencerTaskInit();
+    seqTaskInit();
+    guiTaskInit();
 
     LED1_BLINK_INIT();
 
