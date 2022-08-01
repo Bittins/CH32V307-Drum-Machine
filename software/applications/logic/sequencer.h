@@ -70,6 +70,7 @@ struct PattData
 
 struct MachineState
 {
+    struct PattData patt_data[MAX_PATT];
     enum InstName inst;
     uint8_t step;
     uint8_t page;
@@ -80,15 +81,14 @@ struct MachineState
     uint8_t mode;
 };
 
-struct PattStatePointers
+struct MachineMode
 {
-    struct MachineState* state;
-    struct PattData* patt;
+    void (*mode)(struct MachineState);
 };
 
 uint8_t seqTaskInit(void);
 
-extern rt_mq_t patt_state_mq;
+extern rt_mq_t state_data_mq;
 extern rt_event_t gui_update_event;
 
 #endif /* APPLICATIONS_SEQUENCER_H_ */

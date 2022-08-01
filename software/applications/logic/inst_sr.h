@@ -17,7 +17,7 @@
 
 #define LED1_PIN                1           // PA1
 
-void instSROut(struct PattData* pattern, struct MachineState *state);
+void instSROut(struct StepData *step);
 uint8_t instSRInit(void);
 
 #endif /* APPLICATIONS_INST_SR_H_ */

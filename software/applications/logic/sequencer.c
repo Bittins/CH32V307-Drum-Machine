@@ -14,19 +14,17 @@
 #include <string.h>
 
 uint8_t guiUpdateEventSend(void);
-void kbLEDDataSend(uint8_t led_data[3], struct PattData* patt);
-void seqStepToggle(struct PattData* patt, struct InputEvents* events);
+void seqStepToggle(struct PageData* page, struct InputEvents* events);
 void seqInputQueueGet(struct InputEvents* input_events);
 void encBpmAdj(struct InputEvents* input_events);
 void encButtonInst(struct InputEvents* input_events);
 void bpmSet(uint16_t bpm);
 uint8_t beatTimerInit(void);
 
-rt_mq_t patt_state_mq;
+rt_mq_t state_data_mq;
 rt_event_t gui_update_event;
 
 static struct MachineState state;
-static struct PattData pattern[MAX_PATT];
 
 void seqTaskEntry(void* param)
 {
@@ -36,22 +34,9 @@ void seqTaskEntry(void* param)
     {
         seqInputQueueGet(&input_events);
 
-        seqStepToggle(pattern, &input_events);
+        seqStepToggle(&state.patt_data[state.patt].seq[state.seq].page[state.page], &input_events);
         encBpmAdj(&input_events);
         encButtonInst(&input_events);
-
-//        switch (state.mode)
-//        {
-//            case PATTERN_MODE:
-//
-//                sequencerStepToggle(&sequence, &input_events, &state);
-//
-//                break;
-//
-//            default:
-//
-//                break;
-//        }
 
         guiUpdateEventSend();
     }
@@ -67,10 +52,6 @@ void seqInputQueueGet(struct InputEvents* input_events)
 
 uint8_t guiUpdateEventSend(void)
 {
-//    if (rt_event_send(gui_update_event, 1) != RT_EOK)
-//    {
-//        rt_kprintf("failed to send gui update event\n");
-//    }
     switch (rt_event_send(gui_update_event, 1))
     {
         case RT_EOK:
@@ -87,57 +68,49 @@ uint8_t guiUpdateEventSend(void)
     }
 }
 
-void seqStepToggle(struct PattData* patt, struct InputEvents* events)
+void seqStepToggle(struct PageData* page, struct InputEvents* events)
 {
-    uint8_t cur_patt = state.patt;
-    uint8_t cur_inst = state.seq;
-    uint8_t cur_page = state.page;
-
     uint8_t i;
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < page->length; i++)
     {
-        patt[cur_patt].seq[cur_inst].page[cur_page].step[i].type ^= (events->button_events.just_pressed.main_row >> i) & 1;
+        page->step[i].type ^= (events->button_events.just_pressed.main_row >> i) & 1;
     }
 }
 
-void seqSetDefaults(struct MachineState* state, struct PattData* patt)
+void seqSetDefaults(struct MachineState* state)
 {
-    memset(state, 0, sizeof(state));
-    memset(patt, 0, sizeof(patt));
+    memset(state, 0, sizeof(*state));
 
-    state->bpm = BPM_DEFAULT;
+    state->bpm  = BPM_DEFAULT;
     state->mode = PATTERN_MODE;
 
     uint8_t i;
     uint8_t j;
     uint8_t k;
-    for (i = 0; i < MAX_PATT; i++);
+    for (i = 0; i < MAX_PATT; i++)
     {
-        patt[i].length = 1;
+//        state->patt_data[i].length = 1;
         for (j = 0; j < INST_AMNT; j++)
         {
-            patt->seq[j].length = 1;
+            state->patt_data[i].seq[j].length = 2;
             for (k = 0; k < MAX_PAGE; k++)
             {
-                patt->seq[j].page[k].length = 16;
+                state->patt_data[i].seq[j].page[k].length = 16;
             }
         }
     }
 }
 
-uint8_t guiQueueSend(struct PattData* patt, struct MachineState* state)
+// Sends pointers to state
+uint8_t guiQueueSend(struct MachineState* state)
 {
-    struct PattStatePointers msg;
-    msg.patt = patt;
-    msg.state = state;
-
-    patt_state_mq = rt_mq_create("patt_state_mq", sizeof(msg), 1, RT_IPC_FLAG_PRIO);
-    rt_mq_send(patt_state_mq, &msg, sizeof(msg));
+    state_data_mq = rt_mq_create("state_data_mq", sizeof(state), 1, RT_IPC_FLAG_PRIO);
+    rt_mq_send(state_data_mq, &state, sizeof(state));
 }
 
 uint8_t seqTaskInit(void)
 {
-    seqSetDefaults(&state, pattern);
+    seqSetDefaults(&state);
 
     rt_thread_t tid = rt_thread_create("seqTaskEntry", seqTaskEntry, RT_NULL, 4096, 6, 10);
 
@@ -150,7 +123,7 @@ uint8_t seqTaskInit(void)
         rt_kprintf("failed to start seqTask");
     }
 
-    guiQueueSend(pattern, &state);
+    guiQueueSend(&state);
     gui_update_event = rt_event_create("gui_update_event", RT_IPC_FLAG_PRIO);
 
     instSRInit();
@@ -195,14 +168,26 @@ void bpmSet(uint16_t bpm)
 // TODO: Modify to support polyrhythms
 void beatIncrement(struct MachineState* state)
 {
-    if (state->step < MAX_STEP-1)
+    uint8_t page_length = state->patt_data[state->patt].seq[state->seq].page[state->page].length;
+    uint8_t seq_length  = state->patt_data[state->patt].seq[state->seq].length;
+
+//    rt_kprintf("page length: %d \n seq length: %d \n", page_length, seq_length);
+
+    static uint8_t step_count;
+    static uint8_t page_count;
+
+    state->step = step_count % page_length;
+
+//    rt_kprintf("step %d\n", state->step);
+
+    if (state->step == 0)
     {
-        state->step++;
+        page_count++;
+        state->page = page_count % seq_length;
+//        rt_kprintf("on page %d\n", state->page);
     }
-    else
-    {
-        state->step = 0;
-    }
+
+    step_count++;
 
     guiUpdateEventSend();
 }
@@ -215,7 +200,7 @@ __attribute__((interrupt("WCH-Interrupt-fast"))) void TIM2_IRQHandler(void)
 
     rt_interrupt_enter();
 
-    instSROut(pattern, &state);
+    instSROut(&state.patt_data[state.patt].seq[state.seq].page[state.page].step[state.step]);
 
     beatIncrement(&state);
 
@@ -250,17 +235,17 @@ uint8_t beatTimerInit(void)
     TIM_Cmd(TIM2, ENABLE);
 }
 
-void bpm(int argc, char* argv[])
-{
-    char* str = argv[1];
-    state.bpm = atoi(str);
-    uint16_t period = (60 * BEAT_TIM_ARR_SEC) / state.bpm;
-
-    rt_kprintf("set bpm to %d, period is %d\n", state.bpm, period);
-
-    TIM_SetAutoreload(TIM2, period);
-}
-MSH_CMD_EXPORT(bpm, set bpm);
+//void bpm(int argc, char* argv[])
+//{
+//    char* str = argv[1];
+//    state.bpm = atoi(str);
+//    uint16_t period = (60 * BEAT_TIM_ARR_SEC) / state.bpm;
+//
+//    rt_kprintf("set bpm to %d, period is %d\n", state.bpm, period);
+//
+//    TIM_SetAutoreload(TIM2, period);
+//}
+//MSH_CMD_EXPORT(bpm, set bpm);
 
 //void inst(int argc, char* argv[])
 //{

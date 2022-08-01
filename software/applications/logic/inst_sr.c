@@ -17,20 +17,15 @@
 #include "sequencer.h"
 #include "inst_sr.h"
 
-void instSROut(struct PattData* pattern, struct MachineState *state)
+void instSROut(struct StepData *step)
 {
     uint16_t sr_out = 0;
-
-    uint8_t cur_patt = state->patt;
-//    uint8_t cur_seq = state->seq;
-    uint8_t cur_page = state->page;
-    uint8_t cur_step = state->step;
 
     // TODO: Implement complex steps
     uint8_t inst;
     for (inst = 0; inst < INST_AMNT; inst++)
     {
-        sr_out |= pattern[cur_patt].seq[inst].page[cur_page].step[cur_step].type << inst;
+        sr_out |= step->type << inst;
     }
 
     // Send out data through SPI
