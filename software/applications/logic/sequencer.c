@@ -171,20 +171,15 @@ void beatIncrement(struct MachineState* state)
     uint8_t page_length = state->patt_data[state->patt].seq[state->seq].page[state->page].length;
     uint8_t seq_length  = state->patt_data[state->patt].seq[state->seq].length;
 
-//    rt_kprintf("page length: %d \n seq length: %d \n", page_length, seq_length);
-
     static uint8_t step_count;
     static uint8_t page_count;
 
     state->step = step_count % page_length;
 
-//    rt_kprintf("step %d\n", state->step);
-
     if (state->step == 0)
     {
         page_count++;
         state->page = page_count % seq_length;
-//        rt_kprintf("on page %d\n", state->page);
     }
 
     step_count++;
@@ -200,7 +195,7 @@ __attribute__((interrupt("WCH-Interrupt-fast"))) void TIM2_IRQHandler(void)
 
     rt_interrupt_enter();
 
-    instSROut(&state.patt_data[state.patt].seq[state.seq].page[state.page].step[state.step]);
+    instSROut(&state);
 
     beatIncrement(&state);
 
