@@ -173,6 +173,16 @@
 
 /* u8g2: a monochrome graphic library */
 
+#define PKG_USING_U8G2_OFFICIAL
+#define U8G2_USE_HW_I2C
+#define U8G2_I2C_DEVICE_NAME "i2c2"
+
+/* U8G2 Examples */
+
+#define U8G2_USING_HW_I2C_SSD1306
+/* end of U8G2 Examples */
+#define PKG_USING_U8G2_OFFICIAL_LATEST_VERSION
+#define PKG_U8G2_OFFICIAL_VER_NUM 0x99999
 /* end of u8g2: a monochrome graphic library */
 
 /* PainterEngine: A cross-platform graphics application framework written in C language */
@@ -205,6 +215,10 @@
 
 /* peripheral libraries and drivers */
 
+
+/* Kendryte SDK */
+
+/* end of Kendryte SDK */
 /* end of peripheral libraries and drivers */
 
 /* AI packages */
@@ -236,12 +250,10 @@
 #define BSP_USING_UART
 #define BSP_USING_UART1
 #define BSP_UART1_FIFO_SIZE 10
-#define BSP_USING_TIM
-#define BSP_USING_TIM1
 #define BSP_USING_I2C
-#define BSP_USING_I2C1
-#define BSP_I2C1_SCL_PIN 22
-#define BSP_I2C1_SDA_PIN 23
+#define BSP_USING_I2C2
+#define BSP_I2C2_SCL_PIN 26
+#define BSP_I2C2_SDA_PIN 27
 #define BSP_USING_SPI
 #define BSP_USING_SPI1
 /* end of On-chip Peripheral Drivers */

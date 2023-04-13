@@ -15,6 +15,7 @@
 #include <gui/display.h>
 #include <rtdevice.h>
 #include "drv_spi.h"
+//#include <u8g2_port.h>
 
 #include "input/input.h"
 #include "logic/sequencer.h"
@@ -23,41 +24,12 @@
 /* Global typedef */
 
 /* Global define */
-
-
-#define BEAT_TIM_DEV_NAME       "timer0"
-#define BEAT_TIM_PSC            2400-1      // Timer prescaler value; CLK / PSC = ARR per 1 second
-#define BEAT_TIM_ARR_SEC        60000       // The value the autoreload register would need to be for a 1 second interval
-
 #define LED0_PIN                0           // PA0
 
 
 /* Global Variable */
 //u8g2_t u8g2;
-rt_uint16_t tempo = 160;
-rt_uint8_t inst_current = 0;
 
-//struct instData
-//{
-//    rt_uint8_t id;
-//    const char* name;
-//    struct stepData sequence[8];
-//};
-//
-//struct instData instrument[INST_AMOUNT] = {0};
-
-/* Global Mailbox */
-
-
-/* Global Events */
-rt_event_t inst_trig_event;
-
-/* Function Declarations */
-
-//void stepHandler_init(void);
-//void beatTimer_init(void);
-//void display_init(void);
-//void instSR_init(void);
 
 /*********************************************************************
  * @fn      main
@@ -91,8 +63,6 @@ int main(void)
         rt_thread_mdelay(500);
     }
 }
-
-
 
 
 

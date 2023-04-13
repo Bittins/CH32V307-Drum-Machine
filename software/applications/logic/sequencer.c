@@ -12,12 +12,13 @@
 #include "inst_sr.h"
 #include "gui/gui.h"
 #include <string.h>
+#include "modes.h"
 
 uint8_t guiUpdateEventSend(void);
-void seqStepToggle(struct PageData* page, struct InputEvents* events);
-void seqInputQueueGet(struct InputEvents* input_events);
-void encBpmAdj(struct InputEvents* input_events);
-void encButtonInst(struct InputEvents* input_events);
+
+void seqInputQueueGet(struct InputEvents* input);
+void encBpmAdj(struct InputEvents* input);
+void encButtonInst(struct InputEvents* input);
 void bpmSet(uint16_t bpm);
 uint8_t beatTimerInit(void);
 
@@ -34,7 +35,9 @@ void seqTaskEntry(void* param)
     {
         seqInputQueueGet(&input_events);
 
-        seqStepToggle(&state.patt_data[state.patt].seq[state.seq].page[state.page], &input_events);
+        // Call mode function
+        (modes[state.mode].func)(&state, &input_events);
+
         encBpmAdj(&input_events);
         encButtonInst(&input_events);
 
@@ -42,9 +45,9 @@ void seqTaskEntry(void* param)
     }
 }
 
-void seqInputQueueGet(struct InputEvents* input_events)
+void seqInputQueueGet(struct InputEvents* input)
 {
-    if (rt_mq_recv(input_event_mq, input_events, sizeof(struct InputEvents), RT_WAITING_FOREVER) != RT_EOK)
+    if (rt_mq_recv(input_event_mq, input, sizeof(struct InputEvents), RT_WAITING_FOREVER) != RT_EOK)
     {
         rt_kprintf("failed to read input queue\n");
     }
@@ -68,21 +71,13 @@ uint8_t guiUpdateEventSend(void)
     }
 }
 
-void seqStepToggle(struct PageData* page, struct InputEvents* events)
-{
-    uint8_t i;
-    for (i = 0; i < page->length; i++)
-    {
-        page->step[i].type ^= (events->button_events.just_pressed.main_row >> i) & 1;
-    }
-}
 
 void seqSetDefaults(struct MachineState* state)
 {
     memset(state, 0, sizeof(*state));
 
+//    state->mode = PATTERN_MODE;
     state->bpm  = BPM_DEFAULT;
-    state->mode = PATTERN_MODE;
 
     uint8_t i;
     uint8_t j;
@@ -130,17 +125,17 @@ uint8_t seqTaskInit(void)
     beatTimerInit();
 }
 
-void encBpmAdj(struct InputEvents* input_events)
+void encBpmAdj(struct InputEvents* input)
 {
-    if (input_events->enc_rotation)
+    if (input->enc_rotation)
     {
-        bpmSet(state.bpm + input_events->enc_rotation);
+        bpmSet(state.bpm + input->enc_rotation);
     }
 }
 
-void encButtonInst(struct InputEvents* input_events)
+void encButtonInst(struct InputEvents* input)
 {
-    if (input_events->button_events.just_pressed.enc_button)
+    if (input->button_events.just_pressed.enc_button)
     {
         if (state.seq < 3)
         {

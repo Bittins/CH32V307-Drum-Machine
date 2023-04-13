@@ -23,8 +23,6 @@
 #define BPM_DEFAULT         120
 #define QUARTER_LENGTH      4           // How many beats in a quarter note
 
-#define PATTERN_MODE        1
-
 enum InstName
 {
     kick, snare, ch, tom
@@ -39,7 +37,9 @@ struct InstData
 
 enum StepType
 {
-    empty, simple, complex
+    empty,
+    simple,
+    complex
 };
 
 struct StepData
@@ -79,11 +79,7 @@ struct MachineState
     uint16_t bpm;
     uint8_t swing;
     uint8_t mode;
-};
-
-struct MachineMode
-{
-    void (*mode)(struct MachineState);
+    uint8_t play;
 };
 
 uint8_t seqTaskInit(void);
